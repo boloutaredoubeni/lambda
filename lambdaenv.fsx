@@ -4,6 +4,7 @@
 type Value =
     | Int of int
     | Closure of (Value -> Value)
+    | Product of Value list
 
 type Var = string
 
@@ -20,6 +21,8 @@ type Expr =
     | Apply of Var * Expr
     | Var of Var
     | Primop of Op * Expr list
+    | Product of Expr list
+    | Select of Var * int
 
 module Env =
 
@@ -38,6 +41,10 @@ let eval expr =
     let rec eval expr env =
         match expr with
         | Lit (Int i) -> Value.Int i
+        | Product p ->
+            p
+            |> List.map (fun expr -> eval expr env)
+            |> Value.Product
         | Var v -> Env.find v env
         | Let (v, e1, e2) ->
             let e1 = eval e1 env
@@ -78,6 +85,10 @@ let eval expr =
                         let b = if (i = j) then 1 else 0
                         Value.Int b
                 | e -> failwithf "Not an int: %O" e
+            | e -> failwithf "Not an int: %O" e
+        | Select (p, i) ->
+            match Env.find p env with
+            | Value.Product p -> p.[i]
             | e -> failwithf "Not an int: %O" e
         | e -> failwithf "Not a valid expr: %O" e
     eval expr Env.empty
@@ -145,3 +156,42 @@ do
     let letrec = LetRec (fn, arg, e1, e2)
     let e = eval letrec
     printfn "%O" e
+
+<@
+    let x = 1
+    let y = 1
+    let p = (x, y) in
+    fst p + snd p
+@> |> ignore
+do
+    let e =
+        Let (
+            "x",
+            Lit (Int 1),
+            Let (
+                "y",
+                Lit (Int 1),
+                Let (
+                    "p",
+                    Product
+                        [
+                            Var "x"
+                            Var "y"
+                        ],
+                    Primop(
+                        "+",
+                        [
+                            Select (
+                                "p",
+                                0
+                            )
+                            Select (
+                                "p",
+                                1
+                            )
+                        ]
+                    )
+                )
+            )
+        )
+    printfn "%O" (eval e)
